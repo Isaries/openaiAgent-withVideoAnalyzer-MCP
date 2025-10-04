@@ -1,1 +1,694 @@
-
+{
+  "name": "vvideoAnalyzer-MCP",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Hi there! 👋\n",
+        "options": {
+          "allowFileUploads": true,
+          "loadPreviousSession": "memory",
+          "responseMode": "responseNodes"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -880,
+        -768
+      ],
+      "id": "df31850b-734c-4267-be16-4180775da307",
+      "name": "When chat message received",
+      "webhookId": "0d71af28-0b53-451d-8889-09fb9f4a8678"
+    },
+    {
+      "parameters": {
+        "resource": "assistant",
+        "assistantId": {
+          "__rl": true,
+          "value": "asst_zVnDETnF9Av7tWfiqxw58Exv",
+          "mode": "list",
+          "cachedResultName": "video analysis"
+        },
+        "options": {
+          "preserveOriginalTools": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -272,
+        -256
+      ],
+      "id": "3bcf0fb9-dde2-4605-81c7-39bd6e79c8b8",
+      "name": "Message a model",
+      "credentials": {
+        "openAiApi": {
+          "id": "L9gmR2SiqkxFvlyd",
+          "name": "CW-Key"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -608,
+        32
+      ],
+      "id": "a6024618-c0c7-44b3-a5d5-ccdf8d78a817",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfunction extFromMime(m) {\n  m = (m || '').toLowerCase();\n  if (m.startsWith('video/mp4')) return '.mp4';\n  if (m.startsWith('video/webm')) return '.webm';\n  if (m.startsWith('video/quicktime')) return '.mov';\n  if (m.includes('matroska') || m.includes('mkv')) return '.mkv';\n  return '.mp4';\n}\n\nfunction extFromName(name) {\n  if (!name || typeof name !== 'string') return '.mp4';\n  const dot = name.lastIndexOf('.');\n  if (dot < 0) return '.mp4';\n  const ext = name.slice(dot).toLowerCase();\n  if (['.mp4', '.webm', '.mov', '.mkv'].includes(ext)) return ext;\n  return '.mp4';\n}\n\nfunction pickFirstBinary(bin) {\n  const keys = Object.keys(bin || {});\n  if (!keys.length) return undefined;\n  // 優先挑選 video/*\n  const videoKey = keys.find(k => String(bin[k]?.mimeType || '').toLowerCase().startsWith('video/'));\n  return bin[videoKey || keys[0]];\n}\n\nreturn items.map((item) => {\n  const json = item.json || {};\n  const bin = item.binary || {};\n  const msg = json.message || {};\n\n  const files = Array.isArray(json.files) ? json.files : (Array.isArray(msg.files) ? msg.files : []);\n\n  // 推測 MIME（先看 files、再看 binary）\n  const mimeCandidates = [\n    files[0]?.mimeType,\n    msg.mimeType,\n    ...Object.values(bin).map((b) => b?.mimeType),\n  ].filter(Boolean);\n  const mime = String(mimeCandidates[0] || '').toLowerCase();\n\n  // 類型判斷\n  let kind = 'text';\n  if (mime.startsWith('image/')) kind = 'image';\n  else if (mime.startsWith('video/')) kind = 'video';\n  else if ((msg.type || '').toLowerCase() === 'image') kind = 'image';\n  else if ((msg.type || '').toLowerCase() === 'video') kind = 'video';\n\n  if (files[0]) files[0].fileType = files[0].fileType || kind;\n\n  // 取一個 binary（優先 video/*）\n  const bObj = pickFirstBinary(bin);\n\n  const b64 = bObj?.data;\n  const dataLen = b64 ? b64.length : 0;\n\n  // 檔名推斷：binary.fileName > files[0].fileName > 由 MIME 推斷 > fallback\n  let filename =\n    bObj?.fileName ||\n    files[0]?.fileName ||\n    (bObj?.mimeType ? 'upload' + extFromMime(bObj?.mimeType) : undefined) ||\n    (mime ? 'upload' + extFromMime(mime) : 'input.mp4');\n\n  // 若仍不確定，從檔名再保險一次副檔名\n  const finalExt = filename ? extFromName(filename) : '.mp4';\n  if (!filename) filename = 'upload' + finalExt;\n  if (!filename.endsWith(finalExt)) filename = filename.replace(/\\.[^.]+$/, '') + finalExt;\n\n  return {\n    json: {\n      ...json,\n      files,\n      msgType: kind,\n      data: b64,         // 這個丟給 MCP analyze_video_b64 的 video_b64\n      dataLen,           // 可用來除錯：應該是很大的數字\n      filename,          // 這個丟給 MCP（若你已讓 MCP 接受 filename 參數）\n      mime,\n    },\n    binary: bin,\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        -768
+      ],
+      "id": "69c3ecbb-17ba-4911-b630-c52a7bee3ad0",
+      "name": "JS - Marking Data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d8a6b82f-d12a-4fa4-a832-46b1f401d70e",
+              "leftValue": "={{ $json.files }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "097475ca-5d28-44db-93af-631c42c48d56",
+              "leftValue": "={{ $json.msgType }}",
+              "rightValue": "text",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -160,
+        -768
+      ],
+      "id": "05e0b776-6485-4694-8e93-a92d93d007ee",
+      "name": "Does the file exist?"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "cc10b816-379c-4886-87dd-747f0ce2ba63",
+                    "leftValue": "={{ $json.files[0].fileType }}",
+                    "rightValue": "image",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "image"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9102a4de-5f31-4d64-a314-56f289da3c0d",
+                    "leftValue": "={{ $json.files[0].fileType }}",
+                    "rightValue": "video",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "video"
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": true
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        272,
+        -784
+      ],
+      "id": "3d357774-6332-4e1b-916a-febf9eaefcae",
+      "name": "image or video"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.output }}",
+        "waitUserReply": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1,
+      "position": [
+        -896,
+        16
+      ],
+      "id": "00140abb-854c-4a6f-9e45-35d7fa33b8c9",
+      "name": "Respond to Chat"
+    },
+    {
+      "parameters": {
+        "connectionType": "http",
+        "operation": "executeTool",
+        "toolName": "analyze_video_b64",
+        "toolParameters": "={{ (() => {\nconst o = {\nvideo_b64: String($json.data),\nfilename: 'input.mp4',\nopenai_api_key: \"I don't want to tell you\",\ninclude_logs: true,\n};\nconst df = $json.desired_frames;\nif (df !== undefined && df !== null && String(df).trim() !== '' && String(df).trim() !== '-1') {\no.desired_frames = df;\n}\nreturn JSON.stringify(o);\n})() }}"
+      },
+      "type": "n8n-nodes-mcp.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        -272
+      ],
+      "id": "ff5e6111-684a-4209-be45-85fdf563a4dc",
+      "name": "analyze_video_b64",
+      "credentials": {
+        "mcpClientHttpApi": {
+          "id": "j1AfRQWU4dtGM2Mm",
+          "name": "video-analyzer"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1232,
+        -944
+      ],
+      "id": "b690d6c9-87ae-477d-83c1-0c798e99da5e",
+      "name": "User and Agent messages"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0836e612-dbc9-4416-9306-eeee69ff1c26",
+              "name": "desired_frames",
+              "value": "={{ $json.chatInput.replace(/[^0-9]/g, '') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        -1056
+      ],
+      "id": "7e04cbfb-968b-498e-9613-b529798cb3c3",
+      "name": "Number of custom frames extracted from the message"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "69c111ab-a1ec-4f7b-818f-f6de045d0350",
+              "name": "desired_frames",
+              "value": "-1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        -880
+      ],
+      "id": "c6a032e0-cd61-4316-b177-ccc91a520aaa",
+      "name": "If the user does not provide customized requirements (number of frames)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "1e5a6c9f-cccd-44b4-bb73-4262a3046f7e",
+              "leftValue": "={{ $json.chatInput }}",
+              "rightValue": "^(?:[^0-9]*\\d{1,100}[^0-9]*)$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        416,
+        -1008
+      ],
+      "id": "b098dd92-5abb-4245-ba46-aeef195ccf39",
+      "name": "Check whether the user provides customized requirements"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "700725ac-f578-4abf-892b-47ffb16ba6b2",
+              "name": "desired_frames",
+              "value": "={{ $json.desired_frames }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        -688
+      ],
+      "id": "a8c46b69-be48-4831-942c-8b11249310cb",
+      "name": "Declare the value of desired_frames"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "210e98db-468a-49e2-9208-c5fca764b7f9",
+              "name": "data",
+              "value": "={{ $json.data }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        -496
+      ],
+      "id": "f46ed64f-3b2b-4788-b568-cc51699332a3",
+      "name": "Declare the value of video_b64"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1392,
+        -608
+      ],
+      "id": "0ededc67-851a-4da0-83c7-e8b517caa401",
+      "name": "video_b64 & desired_frames"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8b8b6d5b-4cae-4776-8cfd-f1952f315bba",
+              "name": "chatInput",
+              "value": "={{ \"<This is a system message: The user uploaded a video and this is the system's analysis of the video> \" + $json.result.content[0].text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        -32
+      ],
+      "id": "857950ac-6791-4e43-bf8d-bc849399715d",
+      "name": "Labeled as <system message>"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1509f5b4-e234-43fd-92bc-9432a12650e5",
+              "name": "chatInput",
+              "value": "Please say \"Video Analysis In Progress\" ",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        416,
+        -576
+      ],
+      "id": "65a3b5b6-d71e-4134-9226-8515b453b393",
+      "name": "Reserve the right for the Agent to decide whether to perform video analysis"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "65f5fe0b-2ca3-4ad2-9a61-d0bf7f9e1fec",
+              "leftValue": "={{ $json.output }}",
+              "rightValue": ".*Video Analysis In Progress.*",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        -256
+      ],
+      "id": "ca0562d7-aab0-480c-95ed-41c6ab46b95c",
+      "name": "Video Analysis || Normal Conversation"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "JS - Marking Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Message a model",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "When chat message received",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JS - Marking Data": {
+      "main": [
+        [
+          {
+            "node": "Does the file exist?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Does the file exist?": {
+      "main": [
+        [
+          {
+            "node": "image or video",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check whether the user provides customized requirements",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "image or video": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Reserve the right for the Agent to decide whether to perform video analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Declare the value of video_b64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Video Analysis || Normal Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "analyze_video_b64": {
+      "main": [
+        [
+          {
+            "node": "Labeled as <system message>",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User and Agent messages": {
+      "main": [
+        [
+          {
+            "node": "Declare the value of desired_frames",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Number of custom frames extracted from the message": {
+      "main": [
+        [
+          {
+            "node": "User and Agent messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If the user does not provide customized requirements (number of frames)": {
+      "main": [
+        [
+          {
+            "node": "User and Agent messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check whether the user provides customized requirements": {
+      "main": [
+        [
+          {
+            "node": "Number of custom frames extracted from the message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If the user does not provide customized requirements (number of frames)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Declare the value of desired_frames": {
+      "main": [
+        [
+          {
+            "node": "video_b64 & desired_frames",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Declare the value of video_b64": {
+      "main": [
+        [
+          {
+            "node": "video_b64 & desired_frames",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "video_b64 & desired_frames": {
+      "main": [
+        [
+          {
+            "node": "analyze_video_b64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Labeled as <system message>": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reserve the right for the Agent to decide whether to perform video analysis": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video Analysis || Normal Conversation": {
+      "main": [
+        [
+          {
+            "node": "User and Agent messages",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "96dbf68a-235e-4726-856a-de5fda1fbf4f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5c3b5db3715a57f4ed79fed05ac755845d719ba3ec8ccb7d9438a3d85e556c1f"
+  },
+  "id": "Bp4xFgF6YJVCBozD",
+  "tags": []
+}
