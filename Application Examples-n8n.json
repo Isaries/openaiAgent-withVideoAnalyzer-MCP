@@ -210,7 +210,7 @@
       "type": "n8n-nodes-mcp.mcpClient",
       "typeVersion": 1,
       "position": [
-        1392,
+        2016,
         -272
       ],
       "id": "ff5e6111-684a-4209-be45-85fdf563a4dc",
@@ -227,7 +227,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        1232,
+        1856,
         -944
       ],
       "id": "b690d6c9-87ae-477d-83c1-0c798e99da5e",
@@ -250,8 +250,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        704,
-        -1056
+        1120,
+        -1232
       ],
       "id": "7e04cbfb-968b-498e-9613-b529798cb3c3",
       "name": "Number of custom frames extracted from the message"
@@ -273,44 +273,11 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        704,
+        1120,
         -880
       ],
       "id": "c6a032e0-cd61-4316-b177-ccc91a520aaa",
       "name": "If the user does not provide customized requirements (number of frames)"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "1e5a6c9f-cccd-44b4-bb73-4262a3046f7e",
-              "leftValue": "={{ $json.chatInput }}",
-              "rightValue": "^(?:[^0-9]*\\d{1,100}[^0-9]*)$",
-              "operator": {
-                "type": "string",
-                "operation": "regex"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        416,
-        -1008
-      ],
-      "id": "b098dd92-5abb-4245-ba46-aeef195ccf39",
-      "name": "Check whether the user provides customized requirements"
     },
     {
       "parameters": {
@@ -329,7 +296,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1040,
+        1664,
         -688
       ],
       "id": "a8c46b69-be48-4831-942c-8b11249310cb",
@@ -367,7 +334,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        1392,
+        2016,
         -608
       ],
       "id": "0ededc67-851a-4da0-83c7-e8b517caa401",
@@ -390,7 +357,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1392,
+        2016,
         -32
       ],
       "id": "857950ac-6791-4e43-bf8d-bc849399715d",
@@ -451,6 +418,128 @@
       ],
       "id": "ca0562d7-aab0-480c-95ed-41c6ab46b95c",
       "name": "Video Analysis || Normal Conversation"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c8480456-be76-4994-bbdb-f356b61f6b4a",
+              "name": "agentMessage",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        832,
+        -272
+      ],
+      "id": "cf04e434-4e8c-4cee-885a-ff3389a5e319",
+      "name": "Agent to Video Analyzer"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0836e612-dbc9-4416-9306-eeee69ff1c26",
+              "name": "desired_frames",
+              "value": "={{ $json.arabicNum }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        -1056
+      ],
+      "id": "ba04054e-ef9b-495c-a93d-5e43767269a4",
+      "name": "For customized requirements with quantities expressed in Chinese"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 取得前一節點輸入\nconst input = $json.chatInput;\n\n// 抓出中文數字部分\nconst chineseNum = input.replace(/[^零一二三四五六七八九十百千萬億]/g, '');\n\n// 定義中文數字對照表\nconst numMap = {\n  '零': 0, '一': 1, '二': 2, '三': 3, '四': 4,\n  '五': 5, '六': 6, '七': 7, '八': 8, '九': 9\n};\n\nfunction chineseToNumber(chinese) {\n  if (!chinese) return null;\n\n  // 單位對照\n  const unitMap = { '十': 10, '百': 100, '千': 1000, '萬': 10000, '億': 100000000 };\n\n  let total = 0;\n  let section = 0;\n  let number = 0;\n\n  for (let i = 0; i < chinese.length; i++) {\n    const char = chinese[i];\n    if (char in numMap) {\n      number = numMap[char];\n    } else if (char in unitMap) {\n      const unit = unitMap[char];\n      if (unit === 10000 || unit === 100000000) {\n        section = (section + number) * unit;\n        total += section;\n        section = 0;\n      } else {\n        section += (number || 1) * unit;\n      }\n      number = 0;\n    }\n  }\n  return total + section + number;\n}\n\nreturn [{\n  original: input,\n  chineseNum,\n  arabicNum: chineseToNumber(chineseNum)\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -1056
+      ],
+      "id": "d70c8f53-e862-4ef0-b5e6-0e38838b250b",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f192f793-541b-48e7-8958-4ad0e5e29302",
+                    "leftValue": "={{ $json.chatInput }}",
+                    "rightValue": "^(?:[^0-9]*\\d{1,100}[^0-9]*)$",
+                    "operator": {
+                      "type": "string",
+                      "operation": "regex"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "0fc2fb9a-7d49-4188-96b2-6e2baa73eefb",
+                    "leftValue": "={{ $json.chatInput }}",
+                    "rightValue": "^(?:[^零一二三四五六七八九十百千萬億]*[零一二三四五六七八九十百千萬億]+[^零一二三四五六七八九十百千萬億]*)$",
+                    "operator": {
+                      "type": "string",
+                      "operation": "regex"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        336,
+        -1088
+      ],
+      "id": "91004b58-9dd3-4ce6-a409-5d0feb1ad9a0",
+      "name": "Check whether the user provides customized requirements"
     }
   ],
   "pinData": {},
@@ -588,24 +677,6 @@
         ]
       ]
     },
-    "Check whether the user provides customized requirements": {
-      "main": [
-        [
-          {
-            "node": "Number of custom frames extracted from the message",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "If the user does not provide customized requirements (number of frames)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Declare the value of desired_frames": {
       "main": [
         [
@@ -665,14 +736,72 @@
       "main": [
         [
           {
-            "node": "User and Agent messages",
+            "node": "Agent to Video Analyzer",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ],
         [
           {
             "node": "Respond to Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent to Video Analyzer": {
+      "main": [
+        [
+          {
+            "node": "User and Agent messages",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "For customized requirements with quantities expressed in Chinese": {
+      "main": [
+        [
+          {
+            "node": "User and Agent messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "For customized requirements with quantities expressed in Chinese",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check whether the user provides customized requirements": {
+      "main": [
+        [
+          {
+            "node": "Number of custom frames extracted from the message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If the user does not provide customized requirements (number of frames)",
             "type": "main",
             "index": 0
           }
@@ -684,7 +813,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "96dbf68a-235e-4726-856a-de5fda1fbf4f",
+  "versionId": "7fc99398-11eb-4534-962a-abd2d43ec331",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "5c3b5db3715a57f4ed79fed05ac755845d719ba3ec8ccb7d9438a3d85e556c1f"
